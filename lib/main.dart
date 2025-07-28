@@ -71,12 +71,30 @@ class _AlarmHomeState extends State<AlarmHome> {
   @override
   void initState() {
     super.initState();
-    _startListening();
+    _initializeFirebase();
+  }
+
+  void _initializeFirebase() {
+    if (kIsWeb) {
+      try {
+        dbRef = FirebaseDatabase.instance.ref("state");
+        _startListening();
+      } catch (e) {
+        debugPrint("❌ Firebase Database 초기화 실패: $e");
+      }
+    } else {
+      debugPrint("⚠️ 웹 플랫폼에서만 Firebase Database를 사용할 수 있습니다.");
+    }
   }
 
   void _startListening() {
+    if (dbRef == null) {
+      debugPrint("❌ Firebase Database가 초기화되지 않았습니다.");
+      return;
+    }
+    
     debugPrint("👂 리스너 시작됨");
-    _subscription = dbRef.onValue.listen((event) async {
+    _subscription = dbRef!.onValue.listen((event) async {
       final currentValue = event.snapshot.value;
       debugPrint("📡 Firebase 값 감지: $currentValue");
 
@@ -106,18 +124,45 @@ class _AlarmHomeState extends State<AlarmHome> {
   }
 
   void _sendAlert() async {
-    final snapshot = await dbRef.get();
-    final current = snapshot.value as int? ?? 0;
-    final next = current == 1 ? 0 : 1;
+    if (dbRef == null) {
+      debugPrint("❌ Firebase Database가 초기화되지 않았습니다.");
+      _showErrorDialog("Firebase가 초기화되지 않았습니다.");
+      return;
+    }
 
-    await dbRef.set(next);
-    debugPrint("📤 관리자에 의해 값 변경: $current → $next");
+    try {
+      final snapshot = await dbRef!.get();
+      final current = snapshot.value as int? ?? 0;
+      final next = current == 1 ? 0 : 1;
 
+      await dbRef!.set(next);
+      debugPrint("📤 관리자에 의해 값 변경: $current → $next");
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("📣 알림"),
+          content: const Text("알림을 보냈습니다."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("확인"),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint("❌ 알림 전송 실패: $e");
+      _showErrorDialog("알림 전송에 실패했습니다: $e");
+    }
+  }
+
+  void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("📣 알림"),
-        content: const Text("알림을 보냈습니다."),
+        title: const Text("❌ 오류"),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -153,17 +198,55 @@ class _AlarmHomeState extends State<AlarmHome> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Firebase 연결 상태 표시
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: dbRef != null ? Colors.green.shade50 : Colors.red.shade50,
+                    border: Border.all(
+                      color: dbRef != null ? Colors.green : Colors.red,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        dbRef != null ? Icons.check_circle : Icons.error,
+                        color: dbRef != null ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        dbRef != null ? "Firebase 연결됨" : "Firebase 연결 안됨",
+                        style: TextStyle(
+                          color: dbRef != null ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
                 const Text(
                   "🔊 Firebase 값 변경 시 자동 경고음 발생",
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 18),
                 ),
+                if (!kIsWeb) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    "⚠️ 현재 웹 브라우저에서만 Firebase를 지원합니다.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.orange),
+                  ),
+                ],
                 if (widget.isAdmin) ...[
                   const SizedBox(height: 20),
                   const Text("👮 관리자 모드입니다."),
                   const SizedBox(height: 10),
                   ElevatedButton(
-                    onPressed: _sendAlert,
+                    onPressed: dbRef != null ? _sendAlert : null,
                     child: const Text("🔃 상태 변경 (알림 보내기)"),
                   ),
                 ]
