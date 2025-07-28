@@ -5,13 +5,24 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:async';
 import 'firebase_options.dart';
-import 'dart:html' as html;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  
+  // 웹 플랫폼에서만 Firebase 초기화
+  if (kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint("✅ Firebase 초기화 성공 (웹)");
+    } catch (e) {
+      debugPrint("❌ Firebase 초기화 실패: $e");
+    }
+  } else {
+    debugPrint("⚠️ 현재 웹 플랫폼에서만 Firebase를 지원합니다.");
+  }
+  
   runApp(const MyApp());
 }
 
@@ -52,7 +63,7 @@ class AlarmHome extends StatefulWidget {
 }
 
 class _AlarmHomeState extends State<AlarmHome> {
-  final dbRef = FirebaseDatabase.instance.ref("state");
+  DatabaseReference? dbRef;
   final player = AudioPlayer();
   StreamSubscription<DatabaseEvent>? _subscription;
   dynamic previousValue;
@@ -86,14 +97,9 @@ class _AlarmHomeState extends State<AlarmHome> {
 
   Future<void> _playSound() async {
     try {
-      if (kIsWeb) {
-        final audio = html.AudioElement()
-          ..src = "assets/audio.mp3"
-          ..autoplay = true;
-        html.document.body?.append(audio);
-      } else {
-        await player.play(AssetSource("assets/audio.mp3"));
-      }
+      // AudioPlayer가 웹과 모바일 모두 지원하므로 통일된 방식 사용
+      await player.play(AssetSource("audio.mp3"));
+      debugPrint("🔊 소리 재생 성공");
     } catch (e) {
       debugPrint("❌ 소리 재생 실패: $e");
     }
@@ -215,8 +221,8 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(title: const Text("👮 관리자 로그인")),
         body: Padding(
