@@ -1,0 +1,10 @@
+//{"app_name":"alarm_service","version":"1.0.0","build_number":"1","package_name":"alarm_service"}
+{
+  "public": "build/web",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
